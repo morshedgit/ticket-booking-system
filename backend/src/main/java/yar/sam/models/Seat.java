@@ -8,14 +8,14 @@ public class Seat {
     private int col;
     private Boolean booked;
     private Boolean reserved;
+    @JsonIgnore
+    private Long clientId;
     public Boolean getReserved() {
         return reserved;
     }
     public void setReserved(Boolean reserved) {
         this.reserved = reserved;
     }
-    @JsonIgnore
-    private Long clientId;
     public Long getClientId() {
         return clientId;
     }
