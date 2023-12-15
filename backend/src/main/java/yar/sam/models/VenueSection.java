@@ -1,5 +1,8 @@
 package yar.sam.models;
 
+import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class VenueSection {
@@ -7,7 +10,15 @@ public class VenueSection {
     private String name;
 
     @JsonProperty("venue_id")
-    private Venue venue;
+    private int venueId;
+
+    public int getVenueId() {
+        return venueId;
+    }
+
+    public void setVenueId(int venueId) {
+        this.venueId = venueId;
+    }
 
     public int getId() {
         return id;
@@ -23,14 +34,6 @@ public class VenueSection {
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public Venue getVenue() {
-        return venue;
-    }
-
-    public void setVenue(Venue venue) {
-        this.venue = venue;
     }
 }
 

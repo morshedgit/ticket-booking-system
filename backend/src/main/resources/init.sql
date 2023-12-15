@@ -3,6 +3,12 @@
 DROP FUNCTION IF EXISTS add_event( TIMESTAMP,  TIMESTAMP, INT);
 DROP FUNCTION IF EXISTS reserve_seat( BIGINT,  BIGINT, BIGINT);
 DROP FUNCTION IF EXISTS book_seat( BIGINT,  BIGINT, BIGINT);
+
+DROP FUNCTION IF EXISTS get_venue_by_id;
+
+DROP FUNCTION get_event_by_id;
+
+
 DROP TABLE IF EXISTS address;
 DROP TABLE IF EXISTS contact;
 DROP TABLE IF EXISTS account;
@@ -77,7 +83,7 @@ CREATE TABLE IF NOT EXISTS event (
     event_start_time TIMESTAMP NOT NULL,
     event_end_time TIMESTAMP NOT NULL,
     venue_id BigInt NOT NULL,
-    status event_status
+    status event_status DEFAULT 'ACTIVE'
 );
 
 CREATE TABLE IF NOT EXISTS pricing (
@@ -210,6 +216,96 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION get_venue_by_id(venue_id_arg BIGINT)
+RETURNS TABLE(id BIGINT, name VARCHAR, address_id BIGINT, manager_ids BIGINT[], managers JSON, venueSections JSON, address JSON) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        vn.id::BIGINT,
+        vn.name::VARCHAR,
+        vn.address_id::BIGINT,
+        vn.manager_ids::BIGINT[],
+        json_agg(row_to_json(mg.*)) AS managers,
+        json_agg(row_to_json(sc.*)) AS venueSections,
+        (SELECT row_to_json(ad.*) FROM address ad WHERE ad.id = vn.address_id) AS address
+    FROM "venue" vn
+    LEFT JOIN (
+        SELECT 
+            ac.*,
+            json_agg(row_to_json(ct.*)) AS contacts
+        FROM "account" ac
+        LEFT JOIN (
+            SELECT 
+                ct.*,
+                json_agg(row_to_json(ad.*)) AS addresses
+            FROM contact ct
+            LEFT JOIN address ad ON ad.id = ANY(ct.address_ids)
+            GROUP BY ct.id
+        ) ct ON ct.id = ANY(ac.contact_ids)
+        GROUP BY ac.id
+    ) mg ON mg.id = ANY(vn.manager_ids)
+    LEFT JOIN (
+        SELECT
+            vs.*,
+            json_agg(row_to_json(st.*)) AS seats
+        FROM venue_section vs
+        LEFT JOIN seat st ON st.venue_section_id = vs.id
+        GROUP BY vs.id
+    ) sc ON sc.venue_id = vn.id
+    WHERE vn.id = venue_id_arg
+    GROUP BY vn.id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_event_by_id(event_id_arg BIGINT) 
+RETURNS TABLE(
+    id BIGINT,
+    event_start_time TIMESTAMP,
+    event_end_time TIMESTAMP,
+    venue_id BIGINT,
+    status event_status,
+    venue json, 
+    sections json
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        et.id::BIGINT,
+        et.event_start_time::TIMESTAMP,
+        et.event_end_time::TIMESTAMP,
+        et.venue_id::BIGINT,
+        et.status::event_status,
+        (SELECT row_to_json(vn.*) 
+        FROM get_venue_by_id(et.venue_id) vn
+        LIMIT 1)::JSON AS venue,
+        json_agg(row_to_json(sc.*))::JSON AS sections
+    FROM event et
+    LEFT JOIN (
+        SELECT
+            vs.*,
+            et.id AS event_id,
+            json_agg(
+                json_build_object(
+                    'seat', row_to_json(st.*),
+                    'price', pr.price,
+                    'reserve_status', rs.status,
+                    'booking_status', bk.status
+                )
+            ) AS seats
+        FROM venue_section vs
+        LEFT JOIN seat st ON st.venue_section_id = vs.id
+        LEFT JOIN reservation rs ON rs.seat_id = st.id
+        LEFT JOIN booking bk ON bk.seat_id = st.id
+        LEFT JOIN pricing pr ON pr.venue_section_id = vs.id
+        LEFT JOIN event et ON et.id = pr.event_id
+        GROUP BY et.id, vs.id
+    ) sc ON sc.event_id = et.id
+    WHERE ( event_id_arg IS NOT NULL AND et.id = event_id_arg) OR TRUE
+    GROUP BY et.id;
+END;
+$$ LANGUAGE plpgsql;
+
+
 DELETE FROM address;
 DELETE FROM contact;
 DELETE FROM account;
@@ -299,6 +395,25 @@ LEFT JOIN (
 ) ct ON ct.id = ANY(ac.contact_ids)
 GROUP BY ac.id;
 
+-- SELECT * FROM contact;
+
+-- Get account by email
+SELECT 
+    ac.*,
+    json_agg(row_to_json(ct.*)
+    ) AS contacts
+FROM "account" ac
+LEFT JOIN (
+    SELECT 
+        ct.*,
+        json_agg(row_to_json(ad.*)) AS addresses
+    FROM contact ct
+    LEFT JOIN address ad ON ad.id = ANY(ct.address_ids)
+    WHERE ct.email = 'johndoe@example.com'
+    GROUP BY ct.id
+) ct ON ct.id = ANY(ac.contact_ids)
+GROUP BY ac.id;
+
 
 -- Get clients with their contact info
 SELECT 
@@ -331,7 +446,8 @@ SELECT
     json_agg( row_to_json(mg.*)        
     ) AS managers,
     json_agg(row_to_json(sc.*)
-    ) AS sections
+    ) AS sections,
+    (SELECT row_to_json(ad.*) FROM address ad WHERE ad.id = vn.address_id) AS address
 FROM "venue" vn
 LEFT JOIN (
     SELECT 
@@ -360,13 +476,14 @@ LEFT JOIN (
 ) sc ON sc.venue_id = vn.id
 GROUP BY vn.id;
 
--- Get event with venue and pricing info
+-- GET events
 SELECT
     et.*,
-    vn.*,
+    (SELECT row_to_json(vn.*) 
+     FROM get_venue_by_id(et.venue_id) vn
+     LIMIT 1) AS venue,
     json_agg(row_to_json(sc.*)) AS sections
 FROM event et
-LEFT JOIN venue vn ON vn.id = et.venue_id
 LEFT JOIN (
     SELECT
         vs.*,
@@ -375,8 +492,8 @@ LEFT JOIN (
             json_build_object(
                 'seat', row_to_json(st.*),
                 'price', pr.price,
-                'reserve_status',rs.status,
-                'booking_status',bk.status
+                'reserve_status', rs.status,
+                'booking_status', bk.status
             )
         ) AS seats
     FROM venue_section vs
@@ -385,30 +502,101 @@ LEFT JOIN (
     LEFT JOIN booking bk ON bk.seat_id = st.id
     LEFT JOIN pricing pr ON pr.venue_section_id = vs.id
     LEFT JOIN event et ON et.id = pr.event_id
-    GROUP BY et.id,vs.id
+    GROUP BY et.id, vs.id
 ) sc ON sc.event_id = et.id
-GROUP BY et.id, vn.id;
+GROUP BY et.id;
+
+-- GET events by id
+SELECT
+    et.*,
+    (SELECT row_to_json(vn.*) 
+     FROM get_venue_by_id(et.venue_id) vn
+     LIMIT 1) AS venue,
+    json_agg(row_to_json(sc.*)) AS sections
+FROM event et
+LEFT JOIN (
+    SELECT
+        vs.*,
+        et.id AS event_id,
+        json_agg(
+            json_build_object(
+                'seat', row_to_json(st.*),
+                'price', pr.price,
+                'reserve_status', rs.status,
+                'booking_status', bk.status
+            )
+        ) AS seats
+    FROM venue_section vs
+    LEFT JOIN seat st ON st.venue_section_id = vs.id
+    LEFT JOIN reservation rs ON rs.seat_id = st.id
+    LEFT JOIN booking bk ON bk.seat_id = st.id
+    LEFT JOIN pricing pr ON pr.venue_section_id = vs.id
+    LEFT JOIN event et ON et.id = pr.event_id
+    GROUP BY et.id, vs.id
+) sc ON sc.event_id = et.id
+WHERE et.id = 4
+GROUP BY et.id;
+
+
+
+SELECT * FROM get_event_by_id(1);
 
 -- ADD a new event
-SELECT add_event('2023-12-01 16:00:00', '2023-12-01 18:00:00', 1);
+-- SELECT add_event('2023-12-01 16:00:00', '2023-12-01 18:00:00', 1);
 
--- Cancel an event
-UPDATE event
-SET status = 'CANCELED'
-WHERE id = 1;
+-- -- Cancel an event
+-- UPDATE event
+-- SET status = 'CANCELED'
+-- WHERE id = 1;
 
-SELECT * FROM reserve_seat(1,10,1);
-SELECT * FROM book_seat(1,10,1);
+-- SELECT * FROM reserve_seat(1,10,1);
+-- SELECT * FROM book_seat(1,10,1);
 
-SELECT * FROM reservation;
-SELECT * FROM booking;
+-- SELECT * FROM reservation;
+-- SELECT * FROM booking;
 
-DELETE FROM booking;
+-- DELETE FROM booking;
 
 
 
 -- Cancel a reservation
-UPDATE reservation
-SET status = 'CANCELED'
-WHERE id = 2;
+-- UPDATE reservation
+-- SET status = 'CANCELED'
+-- WHERE id = 2;
+
+-- BEGIN;
+
+-- WITH inserted_address AS (
+--     INSERT INTO address (line_1, line_2, city, province, country_code, postal_code)
+--     VALUES ('123 Example St', 'Apt 4', 'CityName', 'ProvinceName', 'CountryCode', 'PostalCode')
+--     RETURNING id
+-- )
+-- UPDATE contact
+-- SET address_ids = array_append(address_ids, (SELECT id FROM inserted_address))
+-- WHERE id = 1;
+
+-- COMMIT;
+
+-- INSERT INTO address (line_1, line_2, city, province, country_code, postal_code)
+-- VALUES ('123 Example St', 'Apt 4', 'CityName', 'ProvinceName', 'CountryCode', 'PostalCode')
+-- RETURNING id;
+
+-- SELECT * FROM "account";
+
+-- SELECT * FROM contact;
+-- SELECT * FROM address;
+
+
+-- INSERT INTO client (name) VALUES ('Clinet3') RETURNING *, ARRAY[]::integer[] AS managers;
+
+-- INSERT INTO venue (name, address_id) 
+-- VALUES ('Venue2', 2) 
+-- RETURNING *, 
+--     (SELECT row_to_json((SELECT d FROM (SELECT id, line_1, line_2, city, province, country_code, postal_code FROM address WHERE id = address_id) d)) AS address),
+--     '[]'::jsonb AS managers;
+
+--  SELECT e.*
+--     ,
+--     (SELECT row_to_json(v.*) FROM get_venue_by_id(1) v) AS venue
+-- FROM add_event('2023-12-01 22:00:00', '2023-12-01 24:00:00', 1) e;
 

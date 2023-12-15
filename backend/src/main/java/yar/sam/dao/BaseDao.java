@@ -21,10 +21,15 @@ public class BaseDao {
     // Generic Read operation
     public <T> Uni<T> read(String sql, List<Object> params, Function<Row, T> mapper) {
         return client.preparedQuery(sql)
-                     .execute(Tuple.tuple(params))
-                     .onItem().transformToUni(rows -> {
-                             return Uni.createFrom().item(mapper.apply(rows.iterator().next()));
-                     });
+                     .execute(Tuple.tuple(params))                     
+                    .onItem().transformToUni(rows -> {
+                            if (!rows.iterator().hasNext()) {
+                                // Return a null item when no rows are found
+                                return Uni.createFrom().nullItem();
+                            } else {
+                                return Uni.createFrom().item(mapper.apply(rows.iterator().next()));
+                            }
+                    });
     }
     // Generic Create operation
     public <T> Uni<T> create(String sql, List<Object> params, Function<Row, T> mapper) {

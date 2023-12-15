@@ -8,7 +8,7 @@ public class Seat {
     private int col;
 
     @JsonProperty("venue_section_id")
-    private VenueSection venueSection;
+    private int venueSectionId;
 
     public int getId() {
         return id;
@@ -34,11 +34,11 @@ public class Seat {
         this.col = col;
     }
 
-    public VenueSection getVenueSection() {
-        return venueSection;
+    public int getVenueSectionId() {
+        return venueSectionId;
     }
 
-    public void setVenueSection(VenueSection venueSection) {
-        this.venueSection = venueSection;
+    public void setVenueSectionId(int venueSectionId) {
+        this.venueSectionId = venueSectionId;
     }
 }

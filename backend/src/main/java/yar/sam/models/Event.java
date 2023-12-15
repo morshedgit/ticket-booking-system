@@ -1,6 +1,8 @@
 package yar.sam.models;
 
 import java.time.LocalDateTime;
+import java.util.List;
+
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class Event {
@@ -13,8 +15,25 @@ public class Event {
     private LocalDateTime eventEndTime;
 
     @JsonProperty("venue_id")
+    private int venueId;
     private Venue venue;
     private EventStatus status;
+
+    @JsonProperty("sections")
+    private List<VenueSectionEventDTO> venueSections;
+
+    public List<VenueSectionEventDTO> getVenueSections() {
+        return venueSections;
+    }
+    public void setVenueSections(List<VenueSectionEventDTO> venueSections) {
+        this.venueSections = venueSections;
+    }
+    public int getVenueId() {
+        return venueId;
+    }
+    public void setVenueId(int venueId) {
+        this.venueId = venueId;
+    }
     public int getId() {
         return id;
     }

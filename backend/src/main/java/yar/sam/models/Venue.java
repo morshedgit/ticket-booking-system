@@ -10,16 +10,27 @@ public class Venue {
 
     @JsonProperty("address_id")
     private int addressId;
+    private Address address;
+    private List<Account> managers;
+    @JsonProperty("manager_ids")
+    private List<Integer> managerIds;
+    @JsonProperty("venue_sections")
+    private List<VenueSection> venueSections;
+
+
     public int getAddressId() {
         return addressId;
     }
     public void setAddressId(int addressId) {
         this.addressId = addressId;
     }
-    private Address address;
-    private List<Account> managers;
-    @JsonProperty("manager_ids")
-    private List<Integer> managerIds;
+
+    public List<VenueSection> getVenueSections() {
+        return venueSections;
+    }
+    public void setVenueSections(List<VenueSection> venueSections) {
+        this.venueSections = venueSections;
+    }
     public List<Integer> getManagerIds() {
         return managerIds;
     }

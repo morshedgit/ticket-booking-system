@@ -16,6 +16,7 @@ import jakarta.inject.Singleton;
 import yar.sam.models.Account;
 import yar.sam.models.Address;
 import yar.sam.models.Venue;
+import yar.sam.models.VenueSection;
 
 @Singleton
 public class VenueDao extends BaseDao {
@@ -45,6 +46,17 @@ public class VenueDao extends BaseDao {
             }
         }
         venue.setManagers(managers);
+
+        List<VenueSection> sections = new ArrayList<>();
+        JsonArray sectionsJsonArray = row.getJsonArray("sections");
+        if (sectionsJsonArray != null) {
+            try {
+                sections = objectMapper.readValue(sectionsJsonArray.encode(), new TypeReference<List<VenueSection>>() {});
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
+        }
+        venue.setVenueSections(sections);
 
         return venue;
     };
@@ -97,6 +109,7 @@ public class VenueDao extends BaseDao {
                 VALUES ($1, $2) 
                 RETURNING *, 
                     (SELECT row_to_json((SELECT d FROM (SELECT id, line_1, line_2, city, province, country_code, postal_code FROM address WHERE id = address_id) d)) AS address),
+                    '[]'::jsonb AS sections,
                     '[]'::jsonb AS managers;
                 """;
         return this.create(query, List.of(venue.getName(), venue.getAddressId()), venueMapper);
@@ -111,4 +124,5 @@ public class VenueDao extends BaseDao {
         String query = "DELETE FROM venue WHERE id = $1";
         return this.delete(query, List.of(venueId));
     }
+    
 }
