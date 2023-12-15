@@ -14,12 +14,9 @@ public class Dao extends BaseDao {
 
     Function<Row,Seat> seatMapper = row -> {
         Seat createdSeat = new Seat();
-        createdSeat.setId(row.getLong("id")); // Adjust if your ID is of a different type
+        createdSeat.setId(row.getInteger("id")); // Adjust if your ID is of a different type
         createdSeat.setRow(row.getInteger("row"));
         createdSeat.setCol(row.getInteger("col"));
-        createdSeat.setBooked(row.getBoolean("booked"));
-        createdSeat.setReserved(row.getBoolean("reserved"));
-        createdSeat.setClientId(row.getLong("client_id")); // Adjust according to your client_id column type
         return createdSeat;
     };
     

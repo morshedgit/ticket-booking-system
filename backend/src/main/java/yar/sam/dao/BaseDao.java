@@ -21,10 +21,15 @@ public class BaseDao {
     // Generic Read operation
     public <T> Uni<T> read(String sql, List<Object> params, Function<Row, T> mapper) {
         return client.preparedQuery(sql)
-                     .execute(Tuple.tuple(params))
-                     .onItem().transformToUni(rows -> {
-                             return Uni.createFrom().item(mapper.apply(rows.iterator().next()));
-                     });
+                     .execute(Tuple.tuple(params))                     
+                    .onItem().transformToUni(rows -> {
+                            if (!rows.iterator().hasNext()) {
+                                // Return a null item when no rows are found
+                                return Uni.createFrom().nullItem();
+                            } else {
+                                return Uni.createFrom().item(mapper.apply(rows.iterator().next()));
+                            }
+                    });
     }
     // Generic Create operation
     public <T> Uni<T> create(String sql, List<Object> params, Function<Row, T> mapper) {
@@ -50,26 +55,28 @@ public class BaseDao {
 
 
     // Basic Update operation
-    public <T> Uni<T> update(String sql, List<Object> params, Function<Row, T> mapper) {
+    public <T> Uni<Void> update(String sql, List<Object> params) {
         return client.preparedQuery(sql).execute(Tuple.tuple(params))
                      .onFailure().transform(throwable -> new SQLException("Error executing query", throwable))
                      .onItem().transformToUni(rows -> {
                          if (rows.rowCount() == 0) {
                              return Uni.createFrom().failure(new RuntimeException("No rows affected"));
                          } else {
-                             return Uni.createFrom().item(mapper.apply(rows.iterator().next()));
+                            //  return Uni.createFrom().item(mapper.apply(rows.iterator().next()));
+                            return Uni.createFrom().nullItem(); // Return Uni<Void> for success
                          }
-                     });
+                        });// Ensure a Uni<Void> is returned on failure
     }
 
     // Basic Delete operation
-    public <T> Uni<T> delete(String sql, List<Object> params, Function<Row, T> mapper) {
+    public <T> Uni<Void> delete(String sql, List<Object> params) {
         return client.preparedQuery(sql).execute(Tuple.tuple(params))
                      .onItem().transformToUni(rows -> {
                          if (rows.rowCount() == 0) {
                              return Uni.createFrom().failure(new RuntimeException("No rows affected"));
                          } else {
-                             return Uni.createFrom().item(mapper.apply(rows.iterator().next()));
+                            //  return Uni.createFrom().item(mapper.apply(rows.iterator().next()));
+                            return Uni.createFrom().nullItem(); // Return Uni<Void> for success
                          }
                      });
     }
