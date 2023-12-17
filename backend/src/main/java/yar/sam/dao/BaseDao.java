@@ -6,11 +6,10 @@ import io.vertx.mutiny.pgclient.PgPool;
 import io.vertx.mutiny.sqlclient.Row;
 import io.vertx.mutiny.sqlclient.Tuple;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.WebApplicationException;
-import jakarta.ws.rs.core.Response;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.function.Function;
 
 public class BaseDao {
@@ -73,7 +72,7 @@ public class BaseDao {
         return client.preparedQuery(sql).execute(Tuple.tuple(params))
                      .onItem().transformToUni(rows -> {
                          if (rows.rowCount() == 0) {
-                             return Uni.createFrom().failure(new RuntimeException("No rows affected"));
+                             return Uni.createFrom().failure(new NoSuchElementException("No rows affected"));
                          } else {
                             //  return Uni.createFrom().item(mapper.apply(rows.iterator().next()));
                             return Uni.createFrom().nullItem(); // Return Uni<Void> for success
