@@ -14,6 +14,7 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Response;
 import yar.sam.dao.AccountDao;
 import yar.sam.models.Account;
 import yar.sam.models.Address;
@@ -51,28 +52,50 @@ public class AccountResource {
         return dao.deleteAddress(addressId);
     }
 
-    @POST
-    @Path("/{account_id}/contacts/")
-    public Uni<Void> addContact(@PathParam("account_id") int accountId, Contact contact) {       
-        return dao.addContact(accountId, contact);
-    }
-
-    @PUT
-    @Path("/{account_id}/contacts/")
-    public Uni<Void> updateContact(@PathParam("account_id") int accountId, Contact contact) {       
-        return dao.updateContact(contact);
-    }
-
-    @DELETE
-    @Path("/{account_id}/contacts/{contact_id}")
-    public Uni<Void> deleteContact(@PathParam("contact_id") int contact_id) {       
-        return dao.deleteContact(contact_id);
-    }
-
     @GET
     @Path("/{account_id}/contacts")
     public Uni<List<Contact>> getContacts(@PathParam("account_id") int accountId) {       
         return dao.getContacts(accountId);
+    }
+
+    @POST
+    @Path("/{account_id}/contacts/")
+    public Uni<Response> addContact(@PathParam("account_id") int accountId, Contact contact) {       
+        return dao.addContact(accountId, contact)
+                .onItem().transform(result -> Response.status(Response.Status.CREATED).entity(result).build())
+                .onFailure().recoverWithItem(th -> {
+                    // Handle other exceptions
+                    return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(th.getMessage()).build();
+                });
+    }
+
+    @PUT
+    @Path("/{account_id}/contacts/{contact_id}")
+    public Uni<Response> updateContact(@PathParam("account_id") int accountId, @PathParam("contact_id") int contactId, Contact contact) { 
+        contact.setId(contactId);      
+        return dao.updateContact(contact)
+                .onItem().transform(result -> Response.status(Response.Status.NO_CONTENT).entity(result).build())
+                .onFailure().recoverWithItem(th -> {
+                    if (th.getMessage().equals("No rows affected")) {
+                        return Response.status(Response.Status.NOT_FOUND).entity("Resource not found").build();
+                    } 
+                    // Handle other exceptions
+                    return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(th.getMessage()).build();
+                });
+    }
+
+    @DELETE
+    @Path("/{account_id}/contacts/{contact_id}")
+    public Uni<Response> deleteContact(@PathParam("contact_id") int contact_id) {       
+        return dao.deleteContact(contact_id)
+                .onItem().transform(result -> Response.status(Response.Status.NO_CONTENT).entity(result).build())
+                .onFailure().recoverWithItem(th -> {
+                    if (th.getMessage().equals("No rows affected")) {
+                        return Response.status(Response.Status.NOT_FOUND).entity("Resource not found").build();
+                    } 
+                    // Handle other exceptions
+                    return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(th.getMessage()).build();
+                });
     }
 
     @GET
@@ -81,7 +104,7 @@ public class AccountResource {
     }
 
     @POST
-    public Uni<Void> addAccount(Account account) {       
+    public Uni<Account> addAccount(Account account) {       
         return dao.addAccount(account);
     }
 

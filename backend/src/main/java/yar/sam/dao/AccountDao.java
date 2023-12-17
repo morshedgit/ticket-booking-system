@@ -1,4 +1,7 @@
 package yar.sam.dao;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -49,6 +52,7 @@ public class AccountDao extends BaseDao {
         createdContact.setId(row.getInteger("id")); 
         createdContact.setEmail(row.getString("email"));
         createdContact.setPhoneNumber(row.getString("phone_number"));
+        createdContact.setAddressIds(Arrays.asList(row.getArrayOfIntegers("address_ids")));
 
         try{
             JsonArray addressesJsonArray = row.getJsonArray("addresses");
@@ -69,7 +73,8 @@ public class AccountDao extends BaseDao {
         createdAccount.setFirstName(row.getString("first_name"));
         createdAccount.setLastName(row.getString("last_name"));
         createdAccount.setFullName(row.getString("full_name"));
-    
+        createdAccount.setContactIds(Arrays.asList(row.getArrayOfIntegers("contact_ids")));
+
         try {
             JsonArray contactsJsonArray = row.getJsonArray("contacts");
             List<Contact> contacts = objectMapper.readValue(contactsJsonArray.encode(), new TypeReference<List<Contact>>() {});
@@ -157,54 +162,42 @@ public class AccountDao extends BaseDao {
         return this.readAll(query, List.of(accountId), contactMapper);
     }
 
-    public Uni<Void> addContact(int accountId, Contact contact) {
+    public Uni<Contact> addContact(int accountId, Contact contact) {
         LOGGER.error(contact.getEmail());
 
-        return client.withTransaction(transaction -> 
-            transaction.preparedQuery("INSERT INTO contact (email, phone_number) VALUES ($1, $2) RETURNING id")
-                .execute(Tuple.tuple()
-                    .addValue(contact.getEmail())
-                    .addValue(contact.getPhoneNumber())
+        String query = """
+                WITH ct AS (
+                    INSERT INTO contact (email,phone_number) VALUES ($1,$2) RETURNING *
+                ),
+                ac_up AS (
+                    UPDATE account ac SET contact_ids = array_append(contact_ids,ct.id)
+                    FROM ct WHERE ac.id = $3
                 )
-                .onItem().transformToUni(rows -> {
-                    Integer contactId = rows.iterator().next().getInteger("id");
-                    return transaction.preparedQuery("UPDATE account SET contact_ids = array_append(contact_ids, $1) WHERE id = $2")
-                        .execute(Tuple.of( contactId, accountId))
-                        .onItem().transformToUni(ignored -> Uni.createFrom().voidItem());
-                })
-        );
+                SELECT *, '[]'::JSON as address_ids, '[]'::JSON as addresses FROM ct;
+                """;
+        
+        return this.create(query, List.of(contact.getEmail(),contact.getPhoneNumber(),accountId), contactMapper);
     }  
 
     public Uni<Void> updateContact(Contact contact) {
-        return client.withTransaction(transaction -> 
-            transaction
-                .preparedQuery("UPDATE contact ct SET email = $1, phone_number = $2, address_ids = $3 WHERE id = $4")
-                .execute(Tuple.tuple()
-                    .addValue(contact.getEmail())
-                    .addValue(contact.getPhoneNumber())
-                    .addValue(contact.getAddressIds())
-                    .addValue(contact.getId())
-                )
-                .onItem().transformToUni(ignored -> Uni.createFrom().voidItem())
-        );
+        String query = """
+                UPDATE contact ct SET email = $1, phone_number = $2, address_ids = $3 WHERE id = $4
+                """;
+        return this.update(query, List.of(contact.getEmail(),contact.getPhoneNumber(),contact.getAddressIds().toArray(new Integer[0]),contact.getId()));
     }   
 
     
     public Uni<Void> deleteContact(int contactId) {
-        return client.withTransaction(transaction -> 
-            transaction.preparedQuery("DELETE FROM contact WHERE id = $1")
-                .execute(Tuple.of(contactId))
-                .onItem().transformToUni(rows -> {
-                    return transaction.preparedQuery("""
-                        UPDATE 
-                            account ac
-                        SET contact_ids = array_remove(contact_ids, $1)
-                        WHERE $1 = ANY(ac.contact_ids)
-                        """)
-                        .execute(Tuple.of(contactId))
-                        .onItem().transformToUni(ignored -> Uni.createFrom().voidItem());
-                })
-        );
+        String query = """
+                WITH d AS (
+                    DELETE FROM contact WHERE id = $1
+                )
+                UPDATE 
+                    account ac
+                SET contact_ids = array_remove(contact_ids, $1)
+                WHERE $1 = ANY(ac.contact_ids)
+                """;
+        return this.delete(query, List.of(contactId));
     }
 
     public Uni<List<Account>> getAccounts(Optional<String> emailFilter) {        
@@ -222,49 +215,48 @@ public class AccountDao extends BaseDao {
                     json_agg(row_to_json(ad.*)) AS addresses
                 FROM contact ct
                 LEFT JOIN address ad ON ad.id = ANY(ct.address_ids)
-                WHERE ($1 IS NOT NULL AND email = $1) OR TRUE
+                WHERE ($1::VARCHAR IS NOT NULL AND email = $1::VARCHAR) OR TRUE
                 GROUP BY ct.id
             ) ct ON ct.id = ANY(ac.contact_ids)
             GROUP BY ac.id;       
                         """;
-        // Use non-blocking operations with Uni
-        return this.readAll(query, List.of(emailFilter.get()), accountMapper);
+
+            List<Object> parameters = new ArrayList<>();
+            parameters.add(emailFilter.orElse(null)); // This will add null to the list if emailFilter is empty
+
+            return this.readAll(query, parameters, accountMapper);
     }
 
 
-    public Uni<Void> addAccount( Account account) {
+    public Uni<Account> addAccount( Account account) {
 
-        return client.withTransaction(transaction -> 
-            transaction.preparedQuery("INSERT INTO account (first_name, last_name, full_name) VALUES ($1, $2, $3) RETURNING id")
-                .execute(Tuple.tuple()
-                    .addValue(account.getFirstName())
-                    .addValue(account.getLastName())
-                    .addValue(account.getFullName())
-                ).onItem().transformToUni(ignored -> Uni.createFrom().voidItem())
-        );
+        String query = """
+            WITH inserted_account AS (
+                INSERT INTO account (first_name, last_name, full_name)
+                VALUES ($1,$2,$3)
+                RETURNING *
+            )
+            SELECT ac.*, '[]'::JSON AS contacts
+            FROM inserted_account ac;
+                """;
+
+        return this.create(query, List.of(account.getFirstName(),account.getLastName(),account.getFullName()), accountMapper);
     }  
 
     public Uni<Void> updateAccount(Account account) {
-        return client.withTransaction(transaction -> 
-            transaction
-                .preparedQuery("UPDATE account ac SET first_name = $1, last_name = $2, full_name = $3, contact_ids = $4 WHERE id = $5")
-                .execute(Tuple.tuple()
-                    .addValue(account.getFirstName())
-                    .addValue(account.getLastName())
-                    .addValue(account.getFullName())
-                    .addValue(account.getContactIds())
-                    .addValue(account.getId())
-                )
-                .onItem().transformToUni(ignored -> Uni.createFrom().voidItem())
-        );
+        String query = """
+                UPDATE account ac SET first_name = $1, last_name = $2, full_name = $3, contact_ids = $4 WHERE id = $5
+                """;
+
+        return this.update(query, List.of(account.getFirstName(),account.getLastName(),account.getFullName(),account.getContactIds().toArray(new Integer[0]),account.getId()));
+
     }   
 
     public Uni<Void> deleteAccount(int accountId) {
-        return client.withTransaction(transaction -> 
-            transaction.preparedQuery("DELETE FROM account WHERE id = $1")
-                .execute(Tuple.of(accountId))
-                        .onItem().transformToUni(ignored -> Uni.createFrom().voidItem())
-        );
+        String query = """
+                DELETE FROM account WHERE id = $1
+                """;
+        return this.delete(query,List.of(accountId));
     }
 
 }

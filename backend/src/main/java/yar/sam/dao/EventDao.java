@@ -7,6 +7,7 @@ import org.jboss.logging.Logger;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.smallrye.mutiny.Uni;
@@ -19,6 +20,7 @@ import yar.sam.models.Account;
 import yar.sam.models.Address;
 import yar.sam.models.Event;
 import yar.sam.models.Venue;
+import yar.sam.models.Client;
 import yar.sam.models.VenueSectionEventDTO;
 import yar.sam.models.EventStatus;
 
@@ -28,8 +30,12 @@ public class EventDao extends BaseDao {
 
     Function<Row, Event> eventMapper = row -> {
         ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
         Event event = new Event();
         event.setId(row.getInteger("id"));
+        event.setVenueId(row.getInteger("venue_id"));
+        event.setClientId(row.getInteger("client_id"));
         event.setEventStartTime(row.getLocalDateTime("event_start_time"));
         event.setEventEndTime(row.getLocalDateTime("event_end_time"));
         event.setStatus(EventStatus.valueOf(row.getString("status")));
@@ -38,6 +44,15 @@ public class EventDao extends BaseDao {
         if (venueJsonObject != null) {
             try {
                 event.setVenue(objectMapper.readValue(venueJsonObject.encode(), Venue.class));
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
+        }
+
+        JsonObject clientJsonObject = row.getJsonObject("client");
+        if (clientJsonObject != null) {
+            try {
+                event.setClient(objectMapper.readValue(clientJsonObject.encode(), Client.class));
             } catch (JsonProcessingException e) {
                 e.printStackTrace();
             }
@@ -63,25 +78,30 @@ public class EventDao extends BaseDao {
         return this.readAll(query, List.of(), eventMapper);
     }
 
-    public Uni<List<Event>> getEvent(Long eventId) {
+    public Uni<Event> getEvent(Long eventId) {
         String query = "SELECT * FROM get_event_by_id($1)";
-        return this.readAll(query, List.of(eventId), eventMapper);
+        return this.read(query, List.of(eventId), eventMapper);
     }
 
     public Uni<Event> addEvent(Event event) {
         String query ="""
-                    INSERT INTO event (event_start_time, event_end_time, venue_id)
-                    VALUES ($1, $2, $3) RETURNING id AS new_event_id, (SELECT * FROM get_event_by_id(id));
-                """;;
+                    SELECT
+                        e.*
+                    FROM add_event($1,$2,$3,$4) ec
+                    JOIN LATERAL (SELECT * FROM get_event_by_id(ec.id) LIMIT 1) e ON e.id = ec.id;
+                """;
         return this.create(query, 
-            List.of(event.getEventStartTime(), event.getEventEndTime(), event.getVenue().getId(), event.getStatus().toString()), 
+            List.of(event.getEventStartTime(), event.getEventEndTime(), event.getVenueId(),event.getClientId()), 
             eventMapper);
     }
 
     public Uni<Void> updateEvent(Event event) {
-        String query = "UPDATE event SET event_start_time = $1, event_end_time = $2, venue_id = $3, status = $4::event_status WHERE id = $5";
+        String query ="""
+                    UPDATE event
+                    SET event_start_time = $1, event_end_time = $2, venue_id = $3, status = $4::event_status, client_id = $5 WHERE id = $6
+                """;
         return this.update(query, 
-            List.of(event.getEventStartTime(), event.getEventEndTime(), event.getVenueId(), event.getStatus().toString(), event.getId()));
+            List.of(event.getEventStartTime(), event.getEventEndTime(), event.getVenueId(), event.getStatus().toString(), event.getClientId(), event.getId()));
     }
 
     public Uni<Void> deleteEvent(int eventId) {

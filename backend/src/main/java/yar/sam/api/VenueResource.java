@@ -4,9 +4,13 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import yar.sam.dao.PricingDao;
+import yar.sam.dao.ReservationDao;
 import yar.sam.dao.SeatDao;
 import yar.sam.dao.VenueDao;
 import yar.sam.dao.VenueSectionDao;
+import yar.sam.models.Pricing;
+import yar.sam.models.Reservation;
 import yar.sam.models.Seat;
 import yar.sam.models.Venue;
 import yar.sam.models.VenueSection;
@@ -150,4 +154,67 @@ public class VenueResource {
                 .onItem().transform(deleted -> Response.noContent().build());
     }
 
+
+
+
+    @Inject
+    PricingDao pricingDao;
+
+    @GET
+    @Path("/{id}/events/{event_id}/pricings")
+    public Uni<Response> getAllPricings(@PathParam("id") int venueId, @PathParam("event_id") int eventId) {
+        return pricingDao.getAllPricings(venueId,eventId)
+                .onItem().transform(pricings -> Response.ok(pricings).build());
+    }
+
+    @POST
+    @Path("/{id}/events/{event_id}/pricings")
+    public Uni<Response> createPricing(@PathParam("id") int venueId, @PathParam("event_id") int eventId,Pricing pricing) {
+        pricing.setVenueId(venueId);
+        pricing.setEventId(eventId);
+        return pricingDao.addPricing(pricing)
+                .onItem().transform(createdPricing -> Response.status(Response.Status.CREATED).entity(createdPricing).build())
+                .onFailure().recoverWithItem(th -> {
+                    if (th instanceof RuntimeException) {
+                        if (th.getMessage().equals("No rows affected")) {
+                            return Response.status(Response.Status.NO_CONTENT).entity("No rows affected").build();
+                        } else if (th.getMessage().contains("Pricing record already exists")) {
+                            // Replace with the appropriate check for your application
+                            return Response.status(Response.Status.CONFLICT).entity("Pricing record already exists").build();
+                        }
+                    }
+                    // Handle other exceptions
+                    return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(th.getMessage()).build();
+                });
+    }
+
+    @PUT
+    @Path("/{id}/events/{event_id}/pricings/{pricing_id}")
+    public Uni<Response> updatePricing(@PathParam("id") int venueId, @PathParam("event_id") int eventId, @PathParam("pricing_id") int id, Pricing pricing) {
+        pricing.setId(id);
+        pricing.setVenueId(venueId);
+        pricing.setEventId(eventId);
+        pricing.setId(id);
+        return pricingDao.updatePricing(pricing)
+                .onItem().transform(updated -> Response.ok().build())
+                .onFailure().recoverWithItem(th -> {
+                    if (th instanceof RuntimeException) {
+                        if (th.getMessage().equals("No rows affected")) {
+                            return Response.status(Response.Status.NOT_FOUND).entity("Resource not found").build();
+                        } else if (th.getMessage().contains("Pricing record already exists")) {
+                            // Replace with the appropriate check for your application
+                            return Response.status(Response.Status.CONFLICT).entity("Pricing record already exists").build();
+                        }
+                    }
+                    // Handle other exceptions
+                    return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(th.getMessage()).build();
+                });
+    }
+
+    @DELETE
+    @Path("/{id}/events/{event_id}/pricings/{pricing_id}")
+    public Uni<Response> deletePricing(@PathParam("pricing_id") int id) {
+        return pricingDao.deletePricing(id)
+                .onItem().transform(deleted -> Response.noContent().build());
+    }
 }
