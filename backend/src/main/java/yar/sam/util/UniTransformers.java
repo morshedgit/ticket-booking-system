@@ -1,8 +1,6 @@
 package yar.sam.util;
 
-import io.smallrye.mutiny.Uni;
 import jakarta.ws.rs.core.Response;
-import java.util.function.Function;
 import java.util.NoSuchElementException;
 
 public class UniTransformers {

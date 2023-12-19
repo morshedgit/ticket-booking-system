@@ -18,11 +18,13 @@ import io.vertx.mutiny.sqlclient.Row;
 import io.vertx.mutiny.sqlclient.Tuple;
 import io.vertx.core.json.JsonArray;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BeanParam;
 import yar.sam.api.SeatResource;
 import yar.sam.models.Account;
 import yar.sam.models.Address;
 import yar.sam.models.Contact;
 import yar.sam.models.Seat;
+import yar.sam.util.PaginationParams;
 
 @Singleton
 public class AccountDao extends BaseDao {
@@ -87,30 +89,31 @@ public class AccountDao extends BaseDao {
         return createdAccount;
     };
     
-    public Uni<List<Address>> getAddresses(int accountId,int contactId) {        
+    public Uni<List<Address>> getAddresses(int accountId,int contactId, @BeanParam PaginationParams paginationParams) {        
 
         String query =  """
                             SELECT 
                                 * 
                             FROM address ad
                             JOIN contact ct ON ad.id = ANY(ct.address_ids) AND ct.id = $2
-                            JOIN account ac ON ac.id = $1 AND ct.id = ANY(ac.contact_ids);
+                            JOIN account ac ON ac.id = $1 AND ct.id = ANY(ac.contact_ids)
                         """;
         // Use non-blocking operations with Uni
-        return this.readAll(query, List.of(accountId,contactId), addressMapper);
+        String orderByTablePrefix = "ad";
+        return this.readAll(query, List.of(accountId,contactId), addressMapper, paginationParams,orderByTablePrefix);
     }
 
-    public Uni<Void> addAddress(int accountId, int contactId, Address address) {
-        return client.withTransaction(transaction -> 
-            transaction.preparedQuery("INSERT INTO address (line_1, line_2, city, province, country_code, postal_code) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id")
-                .execute(Tuple.of(address.getLine1(), address.getLine2(), address.getCity(), address.getProvince(), address.getCountryCode(), address.getPostalCode()))
-                .onItem().transformToUni(rows -> {
-                    Integer addressId = rows.iterator().next().getInteger("id");
-                    return transaction.preparedQuery("UPDATE contact SET address_ids = array_append(address_ids, $1) WHERE id = $2")
-                        .execute(Tuple.of(addressId, contactId))
-                        .onItem().transformToUni(ignored -> Uni.createFrom().voidItem());
-                })
-        );
+    public Uni<Address> addAddress(int accountId, int contactId, Address address) {
+        String query = """
+                    WITH i AS (
+                        INSERT INTO address (line_1, line_2, city, province, country_code, postal_code) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
+                    ),
+                    u AS (
+                        UPDATE contact SET address_ids = array_append(address_ids, (SELECT id FROM i) ) WHERE id = $7
+                    )
+                    SELECT * FROM i                
+                """;
+        return this.create(query, List.of(address.getLine1(), address.getLine2(), address.getCity(), address.getProvince(), address.getCountryCode(), address.getPostalCode(),contactId), addressMapper);
     }  
 
     public Uni<Void> updateAddress(Address address) {
@@ -131,23 +134,19 @@ public class AccountDao extends BaseDao {
     }   
 
     public Uni<Void> deleteAddress(int addressId) {
-        return client.withTransaction(transaction -> 
-            transaction.preparedQuery("DELETE FROM address WHERE id = $1")
-                .execute(Tuple.of(addressId))
-                .onItem().transformToUni(rows -> {
-                    return transaction.preparedQuery("""
-                        UPDATE 
-                            contact ct
-                        SET address_ids = array_remove(address_ids, $1)
-                        WHERE $1 = ANY(ct.address_ids)
-                        """)
-                        .execute(Tuple.of(addressId))
-                        .onItem().transformToUni(ignored -> Uni.createFrom().voidItem());
-                })
-        );
+        String query = """
+                    WITH d AS (
+                        DELETE FROM address WHERE id = $1
+                    )
+                    UPDATE 
+                        contact ct
+                    SET address_ids = array_remove(address_ids, $1)
+                    WHERE $1 = ANY(ct.address_ids)
+                """;
+        return this.delete(query, List.of(addressId));
     }    
     
-    public Uni<List<Contact>> getContacts(int accountId) {        
+    public Uni<List<Contact>> getContacts(int accountId, @BeanParam PaginationParams paginationParams) {        
 
         String query =  """
                             SELECT 
@@ -156,10 +155,10 @@ public class AccountDao extends BaseDao {
                             FROM contact ct
                             LEFT JOIN address ad ON ad.id = ANY(ct.address_ids)
                             JOIN account ac ON ac.id = $1 AND ct.id = ANY(ac.contact_ids)
-                            GROUP BY ct.id;
+                            GROUP BY ct.id
                         """;
         // Use non-blocking operations with Uni
-        return this.readAll(query, List.of(accountId), contactMapper);
+        return this.readAll(query, List.of(accountId), contactMapper,paginationParams);
     }
 
     public Uni<Contact> addContact(int accountId, Contact contact) {
@@ -173,7 +172,7 @@ public class AccountDao extends BaseDao {
                     UPDATE account ac SET contact_ids = array_append(contact_ids,ct.id)
                     FROM ct WHERE ac.id = $3
                 )
-                SELECT *, '[]'::JSON as address_ids, '[]'::JSON as addresses FROM ct;
+                SELECT *, '[]'::JSON as address_ids, '[]'::JSON as addresses FROM ct
                 """;
         
         return this.create(query, List.of(contact.getEmail(),contact.getPhoneNumber(),accountId), contactMapper);
@@ -237,7 +236,7 @@ public class AccountDao extends BaseDao {
                 RETURNING *
             )
             SELECT ac.*, '[]'::JSON AS contacts
-            FROM inserted_account ac;
+            FROM inserted_account ac
                 """;
 
         return this.create(query, List.of(account.getFirstName(),account.getLastName(),account.getFullName()), accountMapper);
