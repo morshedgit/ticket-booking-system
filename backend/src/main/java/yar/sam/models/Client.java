@@ -8,6 +8,8 @@ public class Client {
     private List<Account> managers;
     @JsonProperty("manager_ids")
     private List<Integer> managerIds;
+
+
     public List<Integer> getManagerIds() {
         return managerIds;
     }

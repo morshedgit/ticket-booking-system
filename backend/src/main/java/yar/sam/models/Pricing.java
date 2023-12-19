@@ -8,14 +8,43 @@ public class Pricing {
     private int id;
 
     @JsonProperty("event_id")
+    private int eventId;
+
     private Event event;
 
     @JsonProperty("venue_id")
+    private int venueId;
+
     private Venue venue;
 
     @JsonProperty("venue_section_id")
+    private int venueSectionId;
+
     private VenueSection venueSection;
+
     private BigDecimal price;
+
+    public int getVenueSectionId() {
+        return venueSectionId;
+    }
+    public void setVenueSectionId(int venueSectionId) {
+        this.venueSectionId = venueSectionId;
+    }
+
+    public int getEventId() {
+        return eventId;
+    }
+    public void setEventId(int eventId) {
+        this.eventId = eventId;
+    }
+
+    public int getVenueId() {
+        return venueId;
+    }
+    public void setVenueId(int venueId) {
+        this.venueId = venueId;
+    }
+
     public int getId() {
         return id;
     }
@@ -46,7 +75,5 @@ public class Pricing {
     public void setPrice(BigDecimal price) {
         this.price = price;
     }
-
-    // Getters and setters
 }
 

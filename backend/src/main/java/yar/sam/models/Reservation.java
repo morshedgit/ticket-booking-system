@@ -6,14 +6,39 @@ public class Reservation {
     private int id;
 
     @JsonProperty("event_id")
-    private Event event;
+    private int eventId;
+
+    public int getEventId() {
+        return eventId;
+    }
+
+    public void setEventId(int eventId) {
+        this.eventId = eventId;
+    }
 
     @JsonProperty("seat_id")
-    private Seat seat;
+    private int seatId;
+
+    public int getSeatId() {
+        return seatId;
+    }
+
+    public void setSeatId(int seatId) {
+        this.seatId = seatId;
+    }
+
     private ReservationStatus status;
 
     @JsonProperty("account_id")
-    private Account account;
+    private int accountId;
+
+    public int getAccountId() {
+        return accountId;
+    }
+
+    public void setAccountId(int accountId) {
+        this.accountId = accountId;
+    }
 
     public int getId() {
         return id;
@@ -23,22 +48,6 @@ public class Reservation {
         this.id = id;
     }
 
-    public Event getEvent() {
-        return event;
-    }
-
-    public void setEvent(Event event) {
-        this.event = event;
-    }
-
-    public Seat getSeat() {
-        return seat;
-    }
-
-    public void setSeat(Seat seat) {
-        this.seat = seat;
-    }
-
     public ReservationStatus getStatus() {
         return status;
     }
@@ -46,14 +55,4 @@ public class Reservation {
     public void setStatus(ReservationStatus status) {
         this.status = status;
     }
-
-    public Account getAccount() {
-        return account;
-    }
-
-    public void setAccount(Account account) {
-        this.account = account;
-    }
-
-    // Getters and setters
 }

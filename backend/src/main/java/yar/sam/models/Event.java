@@ -19,8 +19,26 @@ public class Event {
     private Venue venue;
     private EventStatus status;
 
+    @JsonProperty("client_id")
+    private int clientId;
+
+    private Client client;
+
+    public Client getClient() {
+        return client;
+    }
+    public void setClient(Client client) {
+        this.client = client;
+    }
+    public int getClientId() {
+        return clientId;
+    }
+    public void setClientId(int clientId) {
+        this.clientId = clientId;
+    }
     @JsonProperty("sections")
     private List<VenueSectionEventDTO> venueSections;
+
 
     public List<VenueSectionEventDTO> getVenueSections() {
         return venueSections;
