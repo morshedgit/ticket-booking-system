@@ -5,7 +5,6 @@ import java.util.function.Function;
 import jakarta.inject.Singleton;
 import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.sqlclient.Row;
-import io.vertx.mutiny.sqlclient.Tuple;
 import yar.sam.models.Pricing;
 
 @Singleton
@@ -29,22 +28,16 @@ public class PricingDao extends BaseDao {
     }
 
     public Uni<Pricing> addPricing(Pricing pricing) {
-        return client.withTransaction(transaction -> 
-            transaction.preparedQuery("SELECT 1 FROM pricing WHERE event_id = $1 AND venue_id = $2 AND venue_section_id = $3")
-                .execute(Tuple.of(pricing.getEventId(), pricing.getVenueId(), pricing.getVenueSectionId()))
-                .onItem().transformToUni(rows -> {
-                    if (rows.rowCount() > 0) {
-                        // Throw an exception or return a failure Uni if the record already exists
-                        return Uni.createFrom().failure(new RuntimeException("Pricing record already exists"));
-                    } else {
-                        // Proceed with inserting the new pricing record
-                        String insertQuery = "INSERT INTO pricing (event_id, venue_id, venue_section_id, price) VALUES ($1, $2, $3, $4) RETURNING *";
-                        return transaction.preparedQuery(insertQuery)
-                            .execute(Tuple.of(pricing.getEventId(), pricing.getVenueId(), pricing.getVenueSectionId(), pricing.getPrice()))
-                            .onItem().transformToUni(rowSet -> Uni.createFrom().item(pricingMapper.apply(rowSet.iterator().next())));
-                    }
-                })
-        );
+
+        String query = """
+                    INSERT INTO pricing (event_id, venue_id, venue_section_id, price)
+                    SELECT $1, $2, $3, $4
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM pricing WHERE event_id = $1 AND venue_id = $2 AND venue_section_id = $3
+                    )
+                    RETURNING *;            
+                """;
+        return this.create(query, List.of(pricing.getEventId(), pricing.getVenueId(), pricing.getVenueSectionId()), pricingMapper);
     }    
 
     public Uni<Void> updatePricing(Pricing pricing) {

@@ -110,7 +110,7 @@ public class VenueDao extends BaseDao {
                 RETURNING *, 
                     (SELECT row_to_json((SELECT d FROM (SELECT id, line_1, line_2, city, province, country_code, postal_code FROM address WHERE id = address_id) d)) AS address),
                     '[]'::jsonb AS sections,
-                    '[]'::jsonb AS managers;
+                    '[]'::jsonb AS managers
                 """;
         return this.create(query, List.of(venue.getName(), venue.getAddressId()), venueMapper);
     }
