@@ -1,8 +1,8 @@
 package yar.sam.dao;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import org.jboss.logging.Logger;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -10,10 +10,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonArray;
 import io.vertx.mutiny.sqlclient.Row;
-import io.vertx.mutiny.sqlclient.Tuple;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BeanParam;
 import yar.sam.models.Account;
 import yar.sam.models.Client;
+import yar.sam.util.PaginationParams;
 
 @Singleton
 public class ClientDao extends BaseDao {
@@ -24,6 +25,7 @@ public class ClientDao extends BaseDao {
         Client client = new Client();
         client.setId(row.getInteger("id"));
         client.setName(row.getString("name"));
+        client.setManagerIds(Arrays.asList(row.getArrayOfIntegers("manager_ids")));
 
         try {
             JsonArray managersJsonArray = row.getJsonArray("managers");
@@ -37,7 +39,7 @@ public class ClientDao extends BaseDao {
     };
 
     // CRUD operations for Client
-    public Uni<List<Client>> getClients() {
+    public Uni<List<Client>> getClients(@BeanParam PaginationParams paginationParams) {
         String query = """
             SELECT 
                 cl.*,
@@ -61,8 +63,8 @@ public class ClientDao extends BaseDao {
                 GROUP BY ac.id
             ) mg ON mg.id = ANY(cl.manager_ids)
             GROUP BY cl.id
-                """;;
-        return this.readAll(query, List.of(), clientMapper);
+                """;
+        return this.readAll(query, List.of(), clientMapper,paginationParams, "cl");
     }
 
     public Uni<Client> addClient(Client client) {

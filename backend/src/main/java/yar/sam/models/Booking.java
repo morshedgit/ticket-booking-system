@@ -6,15 +6,15 @@ public class Booking {
     private int id;
 
     @JsonProperty("event_id")
-    private Event event;
+    private int eventId;
 
     @JsonProperty("seat_id")
-    private Seat seat;
+    private int seatId;
 
     private BookingStatus status;
     
     @JsonProperty("account_id")
-    private Account account;
+    private int accountId;
 
     public int getId() {
         return id;
@@ -24,20 +24,20 @@ public class Booking {
         this.id = id;
     }
 
-    public Event getEvent() {
-        return event;
+    public int getEventId() {
+        return eventId;
     }
 
-    public void setEvent(Event event) {
-        this.event = event;
+    public void setEventId(int eventId) {
+        this.eventId = eventId;
     }
 
-    public Seat getSeat() {
-        return seat;
+    public int getSeatId() {
+        return seatId;
     }
 
-    public void setSeat(Seat seat) {
-        this.seat = seat;
+    public void setSeatId(int seatId) {
+        this.seatId = seatId;
     }
 
     public BookingStatus getStatus() {
@@ -48,13 +48,12 @@ public class Booking {
         this.status = status;
     }
 
-    public Account getAccount() {
-        return account;
+    public int getAccountId() {
+        return accountId;
     }
 
-    public void setAccount(Account account) {
-        this.account = account;
-    }
+    public void setAccountId(int accountId) {
+        this.accountId = accountId;
+    }    
 
-    // Getters and setters
 }

@@ -1,11 +1,9 @@
 package yar.sam.dao;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import org.jboss.logging.Logger;
 
@@ -19,7 +17,6 @@ import io.vertx.mutiny.sqlclient.Tuple;
 import io.vertx.core.json.JsonArray;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.BeanParam;
-import yar.sam.api.SeatResource;
 import yar.sam.models.Account;
 import yar.sam.models.Address;
 import yar.sam.models.Contact;

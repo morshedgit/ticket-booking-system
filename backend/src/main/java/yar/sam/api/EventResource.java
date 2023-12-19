@@ -3,13 +3,18 @@ package yar.sam.api;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
+import yar.sam.dao.BookingDao;
 import yar.sam.dao.EventDao;
+import yar.sam.dao.PricingDao;
 import yar.sam.dao.ReservationDao;
+import yar.sam.models.Booking;
 import yar.sam.models.Event;
+import yar.sam.models.Pricing;
 import yar.sam.models.Reservation;
+
+import java.util.List;
+
 import io.smallrye.mutiny.Uni;
-import io.vertx.pgclient.PgException;
 
 @Path("/events")
 @Produces(MediaType.APPLICATION_JSON)
@@ -20,86 +25,102 @@ public class EventResource {
     EventDao eventDao;
 
     @GET
-    public Uni<Response> getAllEvents() {
-        return eventDao.getEvents()
-                .onItem().transform(events -> Response.ok(events).build());
+    public Uni<List<Event>> getAllEvents() {
+        return eventDao.getEvents();
     }
 
     @POST
-    public Uni<Response> createEvent(Event event) {
-        return eventDao.addEvent(event)
-                .onItem().transform(createdEvent -> Response.status(Response.Status.CREATED).entity(createdEvent).build())
-                .onFailure().recoverWithItem(th -> {
-                    if (th instanceof RuntimeException) {
-                        if (th.getMessage().equals("No rows affected")) {
-                            return Response.status(Response.Status.NO_CONTENT).entity("No rows affected").build();
-                        } else if (th.getMessage().contains("Event duration overlaps with an existing event")) {
-                            // Replace with the appropriate check for your application
-                            return Response.status(Response.Status.CONFLICT).entity("Event duration overlaps with an existing event").build();
-                        }
-                    }
-                    // Handle other exceptions
-                    return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(th.getMessage()).build();
-                });
+    public Uni<Event> createEvent(Event event) {
+        return eventDao.addEvent(event);
     }
     
 
     @GET
     @Path("/{id}")
-    public Uni<Response> getEvent(@PathParam("id") Long id) {
-        return eventDao.getEvent(id)
-                .onItem().transform(event -> {
-                    if (event == null) {
-                        return Response.status(Response.Status.NOT_FOUND).build();
-                    } else {
-                        return Response.ok(event).build();
-                    }
-                });
+    public Uni<Event> getEvent(@PathParam("id") Long id) {
+        return eventDao.getEvent(id);
     }
 
     @PUT
     @Path("/{id}")
-    public Uni<Response> updateEvent(@PathParam("id") int id, Event event) {
+    public Uni<Void> updateEvent(@PathParam("id") int id, Event event) {
         event.setId(id);
-        return eventDao.updateEvent(event)
-                .onItem().transform(updated -> Response.ok().build());
+        return eventDao.updateEvent(event);
     }
 
     @DELETE
     @Path("/{id}")
-    public Uni<Response> deleteEvent(@PathParam("id") int id) {
-        return eventDao.deleteEvent(id)
-                .onItem().transform(deleted -> Response.noContent().build());
+    public Uni<Void> deleteEvent(@PathParam("id") int id) {
+        return eventDao.deleteEvent(id);
     }
 
 
     @Inject
-    ReservationDao dao;
+    ReservationDao reservationDao;
 
     @POST
-    @Path("/{event_id}/seats/{seat_id}/reservation")
-    public Uni<Response> addReservation( @PathParam("event_id") int eventId, @PathParam("seat_id") int seatId,Reservation reservation) {
+    @Path("/{event_id}/seats/{seat_id}/reservations")
+    public Uni<Reservation> addReservation( @PathParam("event_id") int eventId, @PathParam("seat_id") int seatId,Reservation reservation) {
         reservation.setEventId(eventId);
         reservation.setSeatId(seatId);
-        return dao.addReservation(reservation)
-                .onItem().transform(createdEvent -> Response.status(Response.Status.CREATED).entity(createdEvent).build())
-                .onFailure().recoverWithItem(th -> {
-                    if (th instanceof RuntimeException) {
-                        if (th.getMessage().equals("No rows affected")) {
-                            return Response.status(Response.Status.NO_CONTENT).entity("No rows affected").build();
-                        } else if (th.getMessage().contains("Seat cannot be reserved")) {
-                            // Replace with the appropriate check for your application
-                            return Response.status(Response.Status.CONFLICT).entity("Seat cannot be reserved").build();
-                        }
-                    }
-                    // Handle other exceptions
-                    return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(th.getMessage()).build();
-                });
+        return reservationDao.addReservation(reservation);
     }
 
     @PUT
-    @Path("/{event_id}/seats/{seat_id}/reservation/{reservation_id}")
+    @Path("/{event_id}/seats/{seat_id}/reservations/{reservation_id}")
     public Uni<Void> cancelReservation(@PathParam("reservation_id") int reservationId) {
-        return dao.cancelReservation(reservationId);
+        return reservationDao.cancelReservation(reservationId);
+    }
+
+
+    @Inject
+    BookingDao bookingDao;
+
+    @POST
+    @Path("/{event_id}/seats/{seat_id}/bookings")
+    public Uni<Booking> addBooking( @PathParam("event_id") int eventId, @PathParam("seat_id") int seatId,Booking booking) {
+        booking.setEventId(eventId);
+        booking.setSeatId(seatId);
+        return bookingDao.addBooking(booking);
+    }
+
+    @PUT
+    @Path("/{event_id}/seats/{seat_id}/bookings/{booking_id}")
+    public Uni<Void> cancelBooking(@PathParam("booking_id") int bookingId) {
+        return bookingDao.cancelBooking(bookingId);
+    }
+
+
+
+    @Inject
+    PricingDao pricingDao;
+
+    @GET
+    @Path("/{event_id}/venues/{venue_id}/pricings")
+    public Uni<List<Pricing>> getPricings(@PathParam("venue_id") int venueId, @PathParam("event_id") int eventId) {
+        return pricingDao.getAllPricings(venueId,eventId);
+    }
+
+    @POST
+    @Path("/{event_id}/venues/{venue_id}/pricings")
+    public Uni<Pricing> createPricing(@PathParam("venue_id") int venueId, @PathParam("event_id") int eventId,Pricing pricing) {
+        pricing.setVenueId(venueId);
+        pricing.setEventId(eventId);
+        return pricingDao.addPricing(pricing);
+    }
+
+    @PUT
+    @Path("/{event_id}/venues/{venue_id}/pricings/{pricing_id}")
+    public Uni<Void> updatePricing(@PathParam("venue_id") int venueId, @PathParam("event_id") int eventId, @PathParam("pricing_id") int pricingId, Pricing pricing) {
+        pricing.setId(pricingId);
+        pricing.setVenueId(venueId);
+        pricing.setEventId(eventId);
+        return pricingDao.updatePricing(pricing);
+    }
+
+    @DELETE
+    @Path("/{event_id}/pricings/{pricing_id}")
+    public Uni<Void> deletePricing(@PathParam("pricing_id") int id) {
+        return pricingDao.deletePricing(id);
     }
 }
